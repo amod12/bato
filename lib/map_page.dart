@@ -25,6 +25,8 @@ class MapParentWidgetState extends State<MapParentWidget> {
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lngController = TextEditingController();
 
+  List<Map<String, dynamic>> poiList = []; // List to store POIs
+
   static const CameraPosition _nullIsland = CameraPosition(
     target: LatLng(0.0, 0.0), // Null Island (0,0 coordinates)
     zoom: 2.0,
@@ -154,12 +156,14 @@ class MapParentWidgetState extends State<MapParentWidget> {
   // Move camera to the specified latitude and longitude
   Future<void> _moveCameraToLocation(double lat, double lng) async {
     if (mapController.isCompleted) {
+      print('@@2');
+
       final controller = await mapController.future;
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(lat, lng),
-            zoom: 10.0, // Adjust zoom level as needed
+            zoom: 15.0, // Adjust zoom level as needed
           ),
         ),
       );
@@ -188,7 +192,9 @@ class MapParentWidgetState extends State<MapParentWidget> {
 
         // Check if the 'data' field exists and is a list
         if (data['data'] != null && data['data'] is List) {
-          final List<dynamic> locations = data['data'];
+          setState(() {
+            poiList = List<Map<String, dynamic>>.from(data['data']);
+          });
 
           // Load the custom marker image (pin.png)
           final Uint8List pinImage = await _loadImageFromAssets('images/pin.jpeg');
@@ -199,7 +205,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
           // Add markers for each location
           print('@@');
           
-          for (final location in locations) {
+          for (final location in poiList) {
           final double lat = location['centroid']['lat'];
           final double lon = location['centroid']['lon'];
 
@@ -291,85 +297,101 @@ class MapParentWidgetState extends State<MapParentWidget> {
               mini: true,
               child: const Icon(Icons.my_location),
             ),
-          const SizedBox(height: 10), // Spacing between buttons
+          const SizedBox(height: 10),
           FloatingActionButton(
             onPressed: _zoomIn,
             mini: true,
             child: const Icon(Icons.add),
           ),
-          const SizedBox(height: 10), // Spacing between buttons
+          const SizedBox(height: 10),
           FloatingActionButton(
             onPressed: _zoomOut,
             mini: true,
             child: const Icon(Icons.remove),
           ),
-          const SizedBox(height: 10), // Spacing between buttons
+          const SizedBox(height: 10),
           FloatingActionButton(
             onPressed: _copyLocationToClipboard,
             mini: true,
             child: const Icon(Icons.copy),
           ),
+          const SizedBox(height: 10),
           FloatingActionButton(
             onPressed: () {
               setState(() {
-                _showPoiList = !_showPoiList;
+                _showPoiList = !_showPoiList; // Toggle the visibility of the POI list
               });
             },
-  mini: true,
-  child: const Icon(Icons.list),
-),
+            mini: true,
+            child: const Icon(Icons.list),
+          ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Search Bar and Button
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    decoration: const InputDecoration(
-                      labelText: 'Latitude',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _lngController,
-                    decoration: const InputDecoration(
-                      labelText: 'Longitude',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: _onSearchButtonClicked,
-                  icon: const Icon(Icons.search),
-                  tooltip: 'Search Location',
-                ),
-              ],
-            ),
+          // Map
+          MapLibreMap(
+            onMapCreated: (controller) {
+              mapController.complete(controller);
+              fetchAndAddMarkers(controller); // Fetch data and add markers
+            },
+            initialCameraPosition: _nullIsland,
+            styleString: "$styleUrl?key=$apiKey",
+            trackCameraPosition: true,
+            onStyleLoadedCallback: () => setState(() => canInteractWithMap = true),
           ),
-          Expanded(
-            child:
-             MapLibreMap(
-              onMapCreated: (controller) {
-                mapController.complete(controller);
-                fetchAndAddMarkers(controller); // Fetch data and add markers
-              },
-              initialCameraPosition: _nullIsland,
-              styleString: "$styleUrl?key=$apiKey",
-              trackCameraPosition: true,
-              onStyleLoadedCallback: () => setState(() => canInteractWithMap = true),
+
+          // POI List (overlayed on top of the map)
+          if (_showPoiList)
+            Positioned(
+              top: 20, // Adjust the position as needed
+              left: 20,
+              right: 20,
+              child: Container(
+                height: 200, // Adjust the height as needed
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9), // Semi-transparent background
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Points of Interest',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: poiList.length,
+                        itemBuilder: (context, index) {
+                          final poi = poiList[index];
+                          return ListTile(
+                            title: Text(poi['name']),
+                            subtitle: Text(poi['address']),
+                            onTap: () {
+                              // Move camera to the selected POI
+                              _moveCameraToLocation(poi['centroid']['lat'], poi['centroid']['lon']);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ), 
         ],
       ),
     );
