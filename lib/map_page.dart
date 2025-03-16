@@ -19,10 +19,11 @@ class MapParentWidgetState extends State<MapParentWidget> {
   final Completer<MapLibreMapController> mapController = Completer();
   bool canInteractWithMap = false;
   bool isLocationEnabled = false;
+  bool _showPoiList = false; // Add this variable to your state class
+
   loc.LocationData? _currentLocation;
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lngController = TextEditingController();
-  List<dynamic> _markerData = []; // Store the fetched marker data
 
   static const CameraPosition _nullIsland = CameraPosition(
     target: LatLng(0.0, 0.0), // Null Island (0,0 coordinates)
@@ -184,10 +185,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
         // If the request is successful
         final data = json.decode(response.body); // Decode JSON response
 
-        // Store the fetched data
-        setState(() {
-          _markerData = data['data'];
-        });
 
         // Check if the 'data' field exists and is a list
         if (data['data'] != null && data['data'] is List) {
@@ -261,53 +258,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
     }
   }
 
-  void _showMarkerDetails(BuildContext context, String name, String address, String type) {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                address,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Type: $type',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // Close the bottom sheet
-                },
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   // Handle search button click
   void _onSearchButtonClicked() {
     try {
@@ -359,6 +309,15 @@ class MapParentWidgetState extends State<MapParentWidget> {
             mini: true,
             child: const Icon(Icons.copy),
           ),
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                _showPoiList = !_showPoiList;
+              });
+            },
+  mini: true,
+  child: const Icon(Icons.list),
+),
         ],
       ),
       body: Column(
@@ -409,66 +368,8 @@ class MapParentWidgetState extends State<MapParentWidget> {
               styleString: "$styleUrl?key=$apiKey",
               trackCameraPosition: true,
               onStyleLoadedCallback: () => setState(() => canInteractWithMap = true),
-              onMapClick: (point, latLng) async {
-                print('clicked');
-
-                if (mapController.isCompleted) {
-                  final controller = await mapController.future;
-
-                  // Query rendered features at the clicked point
-                  final features = await controller.queryRenderedFeatures(
-                    point, // Screen coordinates of the click
-                    ['symbol'], // Layers to query (e.g., 'symbol' layer for markers)
-                    ['==', 'iconImage', 'pin'], // Filter to apply (e.g., markers with 'pin' icon)
-                  );
-                    print([features, '@@@']);
-                  if (features.isNotEmpty) {
-                    // Find the corresponding marker data from _markerData
-                    final marker = _markerData.firstWhere(
-                      (marker) {
-                        // Ensure the marker has the expected properties
-                        if (marker['centroid'] == null ||
-                            marker['centroid']['lat'] == null ||
-                            marker['centroid']['lon'] == null) {
-                          return false;
-                        }
-
-                        final double markerLat = marker['centroid']['lat'];
-                        final double markerLon = marker['centroid']['lon'];
-                        final double tolerance = 0.001; // Increased tolerance
-
-                        // Check if the clicked coordinates are within the tolerance
-                        final bool isMatch = (markerLat - latLng.latitude).abs() < tolerance &&
-                                            (markerLon - latLng.longitude).abs() < tolerance;
-
-                        if (isMatch) {
-                          print('Matching marker found: $marker');
-                        }
-
-                        return isMatch;
-                      },
-                      orElse: () => null, // Return null if no match is found
-                    );
-
-                    if (marker == null) {
-                      print('No matching marker found in _markerData');
-                    }
-
-                    if (marker != null) {
-                      // Show marker details
-                      _showMarkerDetails(
-                        context,
-                        marker['name'],
-                        marker['address'],
-                        marker['type'],
-                      );
-                    }
-                  }
-                }
-              },
             ),
-), 
-
+          ), 
         ],
       ),
     );
