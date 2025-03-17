@@ -6,6 +6,8 @@ import 'package:location/location.dart' as loc;
 import 'package:permission_handler/permission_handler.dart' as perm;
 import 'package:http/http.dart' as http; // Import the http package
 import 'dart:convert'; // For JSON decoding
+import 'package:app_links/app_links.dart';
+
 
 const apiKey = "vtXVqLdP6bQI5NGQ8Jk6";
 const styleUrl = "https://api.maptiler.com/maps/streets-v2/style.json";
@@ -20,10 +22,15 @@ class MapParentWidgetState extends State<MapParentWidget> {
   bool canInteractWithMap = false;
   bool isLocationEnabled = false;
   bool _showPoiList = false; // Add this variable to your state class
+  String selectedType = 'school'; // Default selected type
+
 
   loc.LocationData? _currentLocation;
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lngController = TextEditingController();
+
+  final AppLinks _appLinks = AppLinks();
+
 
   List<Map<String, dynamic>> poiList = []; // List to store POIs
 
@@ -36,6 +43,21 @@ class MapParentWidgetState extends State<MapParentWidget> {
   void initState() {
     super.initState();
     _checkLocationPermission();
+        _handleIncomingLinks();
+
+  }
+
+   void _handleIncomingLinks() {
+     AppLinks().uriLinkStream.listen((Uri? uri) {
+    if (uri != null && uri.host == "map") {
+      final double? lat = double.tryParse(uri.queryParameters["lat"] ?? "");
+      final double? lng = double.tryParse(uri.queryParameters["lng"] ?? "");
+
+      if (lat != null && lng != null) {
+        _moveCameraToLocation(lat, lng);
+      }
+    }
+  });
   }
 
   Future<void> _checkLocationPermission() async {
@@ -50,7 +72,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
 
   Future<void> _getLocation() async {
     loc.Location location = loc.Location();
-
     try {
       bool _serviceEnabled = await location.serviceEnabled();
       if (!_serviceEnabled) {
@@ -60,7 +81,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
           return;
         }
       }
-
       loc.PermissionStatus _permissionGranted = await location.hasPermission();
       if (_permissionGranted == loc.PermissionStatus.denied) {
         _permissionGranted = await location.requestPermission();
@@ -69,7 +89,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
           return;
         }
       }
-
       // _currentLocation = await location.getLocation();
       _currentLocation = loc.LocationData.fromMap({
         "latitude": 27.6856,  // Pepsicola, Kathmandu
@@ -77,7 +96,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
       });
       print('@@');
       print(_currentLocation);
-
       if (_currentLocation != null) {
         setState(() {
           isLocationEnabled = true;
@@ -88,6 +106,44 @@ class MapParentWidgetState extends State<MapParentWidget> {
       print('Error fetching location: $e');
     }
   }
+
+  Future<void> _moveCamera(double lat, double lng) async {
+    if (mapController.isCompleted) {
+      final controller = await mapController.future;
+
+      // Remove all existing symbols with the 'marker' image
+      final symbols = await controller.symbols;
+      for (var symbol in symbols) {
+        if (symbol.options.iconImage == 'marker') {
+          await controller.removeSymbol(symbol);
+        }
+      }
+
+      // Load new marker image
+      await controller.addImage(
+        'marker',
+        await _loadImageFromAssets('images/marker.jpg'),
+      );
+
+      // Move camera to new position
+      controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(lat, lng),
+            zoom: 15.0,
+          ),
+        ),
+      );
+      controller.addSymbol(
+        SymbolOptions(
+          geometry: LatLng(lat, lng),
+          iconImage: 'marker',
+          iconSize: 0.5,
+        ),
+      );
+    }
+  }
+
 
   Future<void> _moveCameraToUserLocation() async {
     if (_currentLocation != null && mapController.isCompleted) {
@@ -116,45 +172,8 @@ class MapParentWidgetState extends State<MapParentWidget> {
       );
     }
   }
-
-  Future<Uint8List> _loadImageFromAssets(String path) async {
-    final ByteData bytes = await rootBundle.load(path);
-    return bytes.buffer.asUint8List();
-  }
-
-  // Zoom in function
-  Future<void> _zoomIn() async {
-    if (mapController.isCompleted) {
-      final controller = await mapController.future;
-      controller.animateCamera(CameraUpdate.zoomIn());
-    }
-  }
-
-  // Zoom out function
-  Future<void> _zoomOut() async {
-    if (mapController.isCompleted) {
-      final controller = await mapController.future;
-      controller.animateCamera(CameraUpdate.zoomOut());
-    }
-  }
-
-  // Copy latitude and longitude to clipboard
-  Future<void> _copyLocationToClipboard() async {
-    if (_currentLocation != null) {
-      final String latLng = 'Latitude: ${_currentLocation!.latitude}, Longitude: ${_currentLocation!.longitude}';
-      await Clipboard.setData(ClipboardData(text: latLng));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location copied to clipboard: $latLng')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No location data available')),
-      );
-    }
-  }
-
-  // Move camera to the specified latitude and longitude
-  Future<void> _moveCameraToLocation(double lat, double lng) async {
+ 
+ Future<void> _moveCameraToLocation(double lat, double lng) async {
     if (mapController.isCompleted) {
       print('@@2');
 
@@ -179,90 +198,151 @@ class MapParentWidgetState extends State<MapParentWidget> {
     }
   }
 
-  Future<void> fetchAndAddMarkers(MapLibreMapController mapController) async {
-    const String apiUrl =
-        "https://api.baato.io/api/v1/search/nearby?type=school&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
+  
+  Future<Uint8List> _loadImageFromAssets(String path) async {
+    final ByteData bytes = await rootBundle.load(path);
+    return bytes.buffer.asUint8List();
+  }
 
-    try {
-      final response = await http.get(Uri.parse(apiUrl));
-        if (response.statusCode == 200) {
-        // If the request is successful
-        final data = json.decode(response.body); // Decode JSON response
-
-
-        // Check if the 'data' field exists and is a list
-        if (data['data'] != null && data['data'] is List) {
-          setState(() {
-            poiList = List<Map<String, dynamic>>.from(data['data']);
-          });
-
-          // Load the custom marker image (pin.png)
-          final Uint8List pinImage = await _loadImageFromAssets('images/pin.jpeg');
-
-          // Add the image to the map
-          await mapController.addImage('pin', pinImage);
-
-          // Add markers for each location
-          print('@@');
-          
-          for (final location in poiList) {
-          final double lat = location['centroid']['lat'];
-          final double lon = location['centroid']['lon'];
-
-          // Add the symbol to the map with location data
-          final symbol = await mapController.addSymbol(
-            SymbolOptions(
-              geometry: LatLng(lat, lon), // Coordinates of the symbol
-              iconImage: 'pin', // Custom marker image
-              iconSize: 0.5, // Size of the icon
-            ),
-          );
-
-          // Set up the onFeatureTapped callback
-          mapController.onFeatureTapped.add((id, point, coordinates, layerId) {
-            // Check if the tapped feature is the symbol we added
-            if (id == symbol.id) {
-              // Retrieve the location data from the symbol
-
-              // Extract the name, address, and type from the location data
-              final name = location['name'];
-              final address = location['address'];
-              final type = location['type'];
-
-              // Perform your custom action here
-              print('Symbol tapped: $name, $address, $type');
-
-              // Show a dialog with the name, address, and type
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Symbol Tapped'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Name: $name'),
-                      Text('Address: $address'),
-                      Text('Type: $type'),
-                    ],
-                  ),
-                ),
-              );
-            }
-          });
-        }
-        } else {
-          print("Invalid data format: 'data' field is missing or not a list");
-        }
-      } else {
-        // Handle errors
-        print("Failed to load data: ${response.statusCode}");
-      }
-    } catch (e) {
-      // Handle exceptions
-      print("Error fetching data: $e");
+  // Zoom in function
+  Future<void> _zoomIn() async {
+    if (mapController.isCompleted) {
+      final controller = await mapController.future;
+      controller.animateCamera(CameraUpdate.zoomIn());
     }
   }
+
+  // Zoom out function
+  Future<void> _zoomOut() async {
+    if (mapController.isCompleted) {
+      final controller = await mapController.future;
+      controller.animateCamera(CameraUpdate.zoomOut());
+    }
+  }
+
+  // Copy latitude and longitude to clipboard
+  Future<void> _copyLocationToClipboard() async {
+  if (_currentLocation != null) {
+    final String deepLink =
+        'bhugolpark://map?lat=${_currentLocation!.latitude}&lng=${_currentLocation!.longitude}';
+
+    await Clipboard.setData(ClipboardData(text: deepLink));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Location link copied to clipboard')),
+    );
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No location data available')),
+    );
+  }
+}
+  
+ Future<void> fetchAndAddMarkers1(MapLibreMapController mapController, {String type = 'school'}) async {
+    final String apiUrl =
+        "https://api.baato.io/api/v1/search/nearby?type=$type&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
+    final response = await http.get(Uri.parse(apiUrl));
+    if (response.statusCode == 200) {
+      // If the request is successful
+      final data = json.decode(response.body); // Decode JSON response
+
+      // Check if the 'data' field exists and is a list
+      if (data['data'] != null && data['data'] is List) {
+        setState(() {
+          poiList = List<Map<String, dynamic>>.from(data['data']);
+        });
+      }
+    }
+  }
+
+  Future<void> fetchAndAddMarkers(MapLibreMapController mapController) async {
+  const String schoolApiUrl =
+      "https://api.baato.io/api/v1/search/nearby?type=school&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
+  const String eatApiUrl =
+      "https://api.baato.io/api/v1/search/nearby?type=eat&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
+
+  try {
+    // Fetch school data
+    final schoolResponse = await http.get(Uri.parse(schoolApiUrl));
+    final eatResponse = await http.get(Uri.parse(eatApiUrl));
+
+    if (schoolResponse.statusCode == 200 && eatResponse.statusCode == 200) {
+      // Decode JSON responses
+      final schoolData = json.decode(schoolResponse.body);
+      final eatData = json.decode(eatResponse.body);
+
+      // Load custom marker images
+      final Uint8List pinImage = await _loadImageFromAssets('images/pin1.webp');
+      final Uint8List eatImage = await _loadImageFromAssets('images/eat.jpg');
+
+      // Add images to the map
+      await mapController.addImage('pin', pinImage);
+      await mapController.addImage('eat', eatImage);
+
+      // Add school markers
+      if (schoolData['data'] != null && schoolData['data'] is List) {
+        final schoolList = List<Map<String, dynamic>>.from(schoolData['data']);
+        await _addMarkers(mapController, schoolList, 'pin');
+      }
+
+      // Add eat markers
+      if (eatData['data'] != null && eatData['data'] is List) {
+        final eatList = List<Map<String, dynamic>>.from(eatData['data']);
+        await _addMarkers(mapController, eatList, 'eat');
+      }
+    } else {
+      print("Failed to load data: School - ${schoolResponse.statusCode}, Eat - ${eatResponse.statusCode}");
+    }
+  } catch (e) {
+    print("Error fetching data: $e");
+  }
+}
+
+  Future<void> _addMarkers(MapLibreMapController mapController, List<Map<String, dynamic>> locations, String iconImage) async {
+  for (final location in locations) {
+    final double lat = location['centroid']['lat'];
+    final double lon = location['centroid']['lon'];
+
+    // Add the symbol to the map with location data
+    final symbol = await mapController.addSymbol(
+      SymbolOptions(
+        geometry: LatLng(lat, lon), // Coordinates of the symbol
+        iconImage: iconImage, // Custom marker image
+        iconSize: 0.5, // Size of the icon
+      ),
+    );
+
+    // Set up the onFeatureTapped callback
+    mapController.onFeatureTapped.add((id, point, coordinates, layerId) {
+      // Check if the tapped feature is the symbol we added
+      if (id == symbol.id) {
+        // Extract the name, address, and type from the location data
+        final name = location['name'];
+        final address = location['address'];
+        final type = location['type'];
+
+        // Perform your custom action here
+        print('Symbol tapped: $name, $address, $type');
+
+        // Show a dialog with the name, address, and type
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Symbol Tapped'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Name: $name'),
+                Text('Address: $address'),
+                Text('Type: $type'),
+              ],
+            ),
+          ),
+        );
+      }
+    });
+  }
+}
 
   // Handle search button click
   void _onSearchButtonClicked() {
@@ -293,25 +373,47 @@ class MapParentWidgetState extends State<MapParentWidget> {
         children: [
           if (isLocationEnabled)
             FloatingActionButton(
-              onPressed: _moveCameraToUserLocation,
+              onPressed: (){
+                _moveCameraToUserLocation();
+                setState(() {
+                  _showPoiList = false; // Toggle the visibility of the POI list
+                });
+                },
               mini: true,
               child: const Icon(Icons.my_location),
             ),
           const SizedBox(height: 10),
           FloatingActionButton(
-            onPressed: _zoomIn,
+            onPressed: (){
+              _zoomIn();
+              setState(() {
+                _showPoiList = false; // Toggle the visibility of the POI list
+              });
+              },
             mini: true,
             child: const Icon(Icons.add),
           ),
           const SizedBox(height: 10),
           FloatingActionButton(
-            onPressed: _zoomOut,
+            onPressed: () {
+              _zoomOut();
+              setState(() {
+                _showPoiList = false; // Toggle the visibility of the POI list
+              });
+            },
+
             mini: true,
             child: const Icon(Icons.remove),
           ),
           const SizedBox(height: 10),
           FloatingActionButton(
-            onPressed: _copyLocationToClipboard,
+            onPressed: () {
+              _copyLocationToClipboard();
+              setState(() {
+                _showPoiList = false; // Toggle the visibility of the POI list
+              });
+            },
+
             mini: true,
             child: const Icon(Icons.copy),
           ),
@@ -333,65 +435,98 @@ class MapParentWidgetState extends State<MapParentWidget> {
           MapLibreMap(
             onMapCreated: (controller) {
               mapController.complete(controller);
+              fetchAndAddMarkers1(controller);
               fetchAndAddMarkers(controller); // Fetch data and add markers
             },
             initialCameraPosition: _nullIsland,
             styleString: "$styleUrl?key=$apiKey",
             trackCameraPosition: true,
             onStyleLoadedCallback: () => setState(() => canInteractWithMap = true),
+            onMapClick: (point, coordinates) {
+              setState(() {
+                _showPoiList = false; // Hide the POI list when the map is clicked
+              });
+            },
           ),
 
           // POI List (overlayed on top of the map)
           if (_showPoiList)
             Positioned(
-              top: 20, // Adjust the position as needed
-              left: 20,
-              right: 20,
-              child: Container(
-                height: 200, // Adjust the height as needed
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9), // Semi-transparent background
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        'Points of Interest',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+            top: 20, // Adjust the position as needed
+            left: 20,
+            right: 20,
+            child: Container(
+              height: 400, // Adjust the height as needed
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9), // Semi-transparent background
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Points of Interest',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                        SizedBox(width: 10), // Add some spacing
+                        DropdownButton<String>(
+                          value: selectedType,
+                          onChanged: (String? newValue) async {
+                            setState(() {
+                              selectedType = newValue!;
+                            });
+                            // Fetch new markers based on the selected type
+                             final controller = await mapController.future;
+
+                            fetchAndAddMarkers1(controller, type: selectedType);
+                          },
+                          items: <String>['school', 'eat']
+                              .map<DropdownMenuItem<String>>((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: poiList.length,
-                        itemBuilder: (context, index) {
-                          final poi = poiList[index];
-                          return ListTile(
-                            title: Text(poi['name']),
-                            subtitle: Text(poi['address']),
-                            onTap: () {
-                              // Move camera to the selected POI
-                              _moveCameraToLocation(poi['centroid']['lat'], poi['centroid']['lon']);
-                            },
-                          );
-                        },
-                      ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: poiList.length,
+                      itemBuilder: (context, index) {
+                        final poi = poiList[index];
+                        return ListTile(
+                          title: Text(poi['name']),
+                          subtitle: Text(poi['address']),
+                          onTap: () {
+                            setState(() {
+                              _showPoiList = false; // Toggle the visibility of the POI list
+                            });
+                            // Move camera to the selected POI
+                            _moveCamera(poi['centroid']['lat'], poi['centroid']['lon']);
+                          },
+                        );
+                      },
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
