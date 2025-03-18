@@ -42,13 +42,16 @@ class MapParentWidgetState extends State<MapParentWidget> {
   @override
   void initState() {
     super.initState();
-    _checkLocationPermission();
+        _checkLocationPermission();
         _handleIncomingLinks();
-
   }
 
    void _handleIncomingLinks() {
+     print("@@11"); // Debugging
      AppLinks().uriLinkStream.listen((Uri? uri) {
+       print("@@21"); // Debugging
+
+       print("Incoming URI: $uri"); // Debugging
     if (uri != null && uri.host == "map") {
       final double? lat = double.tryParse(uri.queryParameters["lat"] ?? "");
       final double? lng = double.tryParse(uri.queryParameters["lng"] ?? "");
@@ -138,7 +141,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
         SymbolOptions(
           geometry: LatLng(lat, lng),
           iconImage: 'marker',
-          iconSize: 0.5,
+          iconSize: 0.4,
         ),
       );
     }
@@ -158,7 +161,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!),
-            zoom: 10.0,
+            zoom: 15.0,
           ),
         ),
       );
@@ -167,7 +170,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
         SymbolOptions(
           geometry: LatLng(_currentLocation!.latitude!, _currentLocation!.longitude!),
           iconImage: 'marker',
-          iconSize: 0.5,
+          iconSize: 0.4,
         ),
       );
     }
@@ -192,7 +195,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
         SymbolOptions(
           geometry: LatLng(lat, lng),
           iconImage: 'marker',
-          iconSize: 0.5,
+          iconSize: 0.4,
         ),
       );
     }
@@ -222,20 +225,20 @@ class MapParentWidgetState extends State<MapParentWidget> {
 
   // Copy latitude and longitude to clipboard
   Future<void> _copyLocationToClipboard() async {
-  if (_currentLocation != null) {
-    final String deepLink =
-        'bhugolpark://map?lat=${_currentLocation!.latitude}&lng=${_currentLocation!.longitude}';
+    if (_currentLocation != null) {
+      final String deepLink =
+          'bato://map?lat=${_currentLocation!.latitude}&lng=${_currentLocation!.longitude}';
 
-    await Clipboard.setData(ClipboardData(text: deepLink));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Location link copied to clipboard')),
-    );
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No location data available')),
-    );
+      await Clipboard.setData(ClipboardData(text: deepLink));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Location link copied to clipboard')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No location data available')),
+      );
+    }
   }
-}
   
  Future<void> fetchAndAddMarkers1(MapLibreMapController mapController, {String type = 'school'}) async {
     final String apiUrl =
@@ -259,7 +262,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
       "https://api.baato.io/api/v1/search/nearby?type=school&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
   const String eatApiUrl =
       "https://api.baato.io/api/v1/search/nearby?type=eat&lat=27.71765&lon=85.32691&key=bpk.XsRdlr_BeG-ri__yLIri5h1tJ5tMpSjqIbrzb_Cf99K5&radius=1&limit=10";
-
+  print('@@in');
   try {
     // Fetch school data
     final schoolResponse = await http.get(Uri.parse(schoolApiUrl));
@@ -271,7 +274,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
       final eatData = json.decode(eatResponse.body);
 
       // Load custom marker images
-      final Uint8List pinImage = await _loadImageFromAssets('images/pin1.webp');
+      final Uint8List pinImage = await _loadImageFromAssets('images/pin1.png');
       final Uint8List eatImage = await _loadImageFromAssets('images/eat.jpg');
 
       // Add images to the map
@@ -307,7 +310,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
       SymbolOptions(
         geometry: LatLng(lat, lon), // Coordinates of the symbol
         iconImage: iconImage, // Custom marker image
-        iconSize: 0.5, // Size of the icon
+        iconSize: 0.4, // Size of the icon
       ),
     );
 
@@ -327,7 +330,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('Symbol Tapped'),
+            title: Text('Location Info'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,90 +347,74 @@ class MapParentWidgetState extends State<MapParentWidget> {
   }
 }
 
-  // Handle search button click
-  void _onSearchButtonClicked() {
-    try {
-      final double lat = double.parse(_latController.text.trim());
-      final double lng = double.parse(_lngController.text.trim());
-
-      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        _moveCameraToLocation(lat, lng);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid latitude or longitude values')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter valid latitude and longitude')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButtonLocation: FloatingActionButtonLocation.miniCenterFloat,
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          if (isLocationEnabled)
-            FloatingActionButton(
-              onPressed: (){
-                _moveCameraToUserLocation();
-                setState(() {
-                  _showPoiList = false; // Toggle the visibility of the POI list
-                });
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(left: 16.0), // Add left padding
+        child: Align(
+          alignment: Alignment.centerLeft, // Align to the left side
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (isLocationEnabled)
+                FloatingActionButton(
+                  onPressed: () {
+                    _moveCameraToUserLocation();
+                    setState(() {
+                      _showPoiList = false; // Toggle the visibility of the POI list
+                    });
+                  },
+                  mini: true,
+                  child: const Icon(Icons.my_location),
+                ),
+              const SizedBox(height: 10),
+              FloatingActionButton(
+                onPressed: () {
+                  _zoomIn();
+                  setState(() {
+                    _showPoiList = false; // Toggle the visibility of the POI list
+                  });
                 },
-              mini: true,
-              child: const Icon(Icons.my_location),
-            ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: (){
-              _zoomIn();
-              setState(() {
-                _showPoiList = false; // Toggle the visibility of the POI list
-              });
-              },
-            mini: true,
-            child: const Icon(Icons.add),
+                mini: true,
+                child: const Icon(Icons.add),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton(
+                onPressed: () {
+                  _zoomOut();
+                  setState(() {
+                    _showPoiList = false; // Toggle the visibility of the POI list
+                  });
+                },
+                mini: true,
+                child: const Icon(Icons.remove),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton(
+                onPressed: () {
+                  _copyLocationToClipboard();
+                  setState(() {
+                    _showPoiList = false; // Toggle the visibility of the POI list
+                  });
+                },
+                mini: true,
+                child: const Icon(Icons.copy),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton(
+                onPressed: () {
+                  setState(() {
+                    _showPoiList = !_showPoiList; // Toggle the visibility of the POI list
+                  });
+                },
+                mini: true,
+                child: const Icon(Icons.list),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: () {
-              _zoomOut();
-              setState(() {
-                _showPoiList = false; // Toggle the visibility of the POI list
-              });
-            },
-
-            mini: true,
-            child: const Icon(Icons.remove),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: () {
-              _copyLocationToClipboard();
-              setState(() {
-                _showPoiList = false; // Toggle the visibility of the POI list
-              });
-            },
-
-            mini: true,
-            child: const Icon(Icons.copy),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: () {
-              setState(() {
-                _showPoiList = !_showPoiList; // Toggle the visibility of the POI list
-              });
-            },
-            mini: true,
-            child: const Icon(Icons.list),
-          ),
-        ],
+        ),
       ),
       body: Stack(
         children: [
@@ -452,7 +439,7 @@ class MapParentWidgetState extends State<MapParentWidget> {
           // POI List (overlayed on top of the map)
           if (_showPoiList)
             Positioned(
-            top: 20, // Adjust the position as needed
+            top: 100, // Adjust the position as needed
             left: 20,
             right: 20,
             child: Container(
@@ -490,7 +477,6 @@ class MapParentWidgetState extends State<MapParentWidget> {
                             });
                             // Fetch new markers based on the selected type
                              final controller = await mapController.future;
-
                             fetchAndAddMarkers1(controller, type: selectedType);
                           },
                           items: <String>['school', 'eat']

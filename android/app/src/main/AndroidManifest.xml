@@ -41,7 +41,7 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="bhugolpark" android:host="map"/>
+                <data android:scheme="bato" android:host="map"/>
             </intent-filter>
 
         </activity>
